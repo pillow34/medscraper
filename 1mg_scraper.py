@@ -3,7 +3,7 @@ import re
 import json
 import sys
 import io
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, expect
 
 # Fix encoding for Windows
 if sys.platform == "win32":
@@ -154,6 +154,219 @@ async def scrape_1mg(browser, medicine_name, max_products=10):
     return results
 
 
+async def scrape_1mg_product_detail(browser, product_url):
+    """
+    Scrapes detailed information from a specific 1mg product page.
+
+    Args:
+        browser: Playwright browser instance
+        product_url: Full URL to the 1mg product page
+
+    Returns:
+        Dictionary with detailed product information
+    """
+    context = await browser.new_context(
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        viewport={"width": 1920, "height": 1080},
+    )
+    page = await context.new_page()
+
+    result = {}
+
+    try:
+        print(f"Scraping product: {product_url}")
+        await page.goto(product_url, wait_until="load", timeout=90000)
+        await page.wait_for_timeout(1300)
+        print(f"{page.content}")
+
+
+        # Medicine Name
+        name_el = page.locator('h1[class*="DrugHeader__title"]').first
+        result["medicine_name"] = (
+            (await name_el.inner_text()).strip() if await name_el.count() > 0 else None
+        )
+
+        # Medicine Composition
+        comp_el = page.locator('div[class*="saltInfo"]').first
+        result["medicine_composition"] = (
+            (await comp_el.inner_text()).strip() if await comp_el.count() > 0 else None
+        )
+
+        # Medicine Marketer (Manufacturer)
+        mfr_el = page.locator('div[class*="DrugHeader__meta-value"]').first
+        result["medicine_marketer"] = (
+            (await mfr_el.inner_text()).strip() if await mfr_el.count() > 0 else None
+        )
+
+        # Medicine Storage
+        storage_el = page.locator('text=/Store.*below/i').first
+        if await storage_el.count() == 0:
+            storage_el = page.locator('text=/Storage/i').locator("xpath=following-sibling::*").first
+        result["medicine_storage"] = (
+            (await storage_el.inner_text()).strip() if await storage_el.count() > 0 else None
+        )
+
+        # MRP (Original Price)
+        mrp_el = page.locator('span[class*="DrugPriceBox__slashed-price"]').first
+        result["medicine_mrp"] = extract_price(
+            await mrp_el.inner_text() if await mrp_el.count() > 0 else None
+        )
+
+        # Selling Price
+        # price_el = page.locator('div[class*="DrugPriceBox__best-price"]').first
+        price_el = page.locator('div[class*="DrugPriceBox__best-price___32JXw"]')
+        result["medicine_selling_price"] = extract_price(
+            await price_el.inner_text() if await price_el.count() > 0 else None
+        )
+
+        # Discount Percentage
+        discount_el = page.locator('span[class*="DrugPriceBox__slashed-percent"]').first
+        result["medicine_discount"] = extract_discount(
+            await discount_el.inner_text() if await discount_el.count() > 0 else None
+        )
+
+        # Pack Size Information
+        pack_el = page.locator('div[class*="DrugPriceBox__quantity"]').first
+        result["pack_size_information"] = (
+            (await pack_el.inner_text()).strip() if await pack_el.count() > 0 else None
+        )
+
+        # Substitutes
+        result["substitutes"] = []
+        substitute_section = page.locator('div[class*="SubstituteList__container"]').first
+        if await substitute_section.count() > 0:
+            sub_cards = await substitute_section.locator('div[class*="SubstituteItem__item"]').all()
+            print(f"  Found {len(sub_cards)} substitutes")
+
+            for sub_card in sub_cards:
+                try:
+                    # Substitute name
+                    sub_name_el = sub_card
+                    sub_name = (
+                        (await sub_name_el.locator('div[class*="SubstituteItem__name"]').inner_text()).strip()
+                        if await sub_name_el.count() > 0
+                        else None
+                    )
+
+                    # Substitute URL
+                    sub_link_el = sub_card.locator('a').first
+                    sub_url = None
+                    if await sub_link_el.count() > 0:
+                        href = await sub_link_el.get_attribute("href")
+                        sub_url = f"https://www.1mg.com{href}" if href else None
+
+                    # Substitute Price
+                    sub_price_el = sub_card.locator('div[class*="SubstituteItem__unit-price"]').first
+                    sub_price = extract_price(
+                        await sub_price_el.inner_text() \
+                        if await sub_price_el.count() > 0 \
+                        else None)
+
+                    # Cheaper percentage
+                    cheaper_perc_el = sub_card.locator('div[class*="SubstituteItem__save-text"]').first
+                    cheaper_pct = \
+                        await cheaper_perc_el.inner_text() \
+                        if await cheaper_perc_el.count() > 0 \
+                        else None
+
+
+                    # Calculate cheaper percentage
+                    # cheaper_pct = None
+                    # if (
+                    #     sub_price
+                    #     and result["medicine_selling_price"]
+                    #     and result["medicine_selling_price"] > 0
+                    # ):
+                    #     cheaper_pct = round(
+                    #         ((result["medicine_selling_price"] - sub_price)
+                    #          / result["medicine_selling_price"])
+                    #         * 100,
+                    #         2,
+                    #     )
+
+                    if sub_name and sub_url:
+                        result["substitutes"].append(
+                            {
+                                "substitute_name": sub_name,
+                                "url": sub_url,
+                                "price_per_unit": sub_price,
+                                "cheaper_percentage": cheaper_pct,
+                            }
+                        )
+                except Exception as e:
+                    print(f"  [Error parsing substitute] {str(e)[:60]}")
+                    continue
+
+        # Generic Alternative Information
+        result["generic_alternative_available"] = False
+        result["generic_alternative"] = None
+
+        # Look for the cheaper alternative section - it's usually in a card showing "Cheaper alternative available"
+        # Try to find the section with class containing "InStockRxSubstitution"
+        generic_container = page.locator('div[class*="InStockRxSubstitution__rightSku"]').first
+
+        if await generic_container.count() > 0:
+            result["generic_alternative_available"] = True
+
+            # Get the link to the generic product
+            gen_link_el = generic_container.locator('a[href*="/drugs/"]').first
+            gen_name = None
+            gen_url = None
+
+            if await gen_link_el.count() > 0:
+                # Get URL
+                href = await gen_link_el.get_attribute("href")
+                gen_url = f"https://www.1mg.com{href}" if href and href.startswith("/") else href
+
+            # Get the product name - extract from URL (most reliable method)
+            if gen_url:
+                # URL pattern: /drugs/durite-5-tablet-737465
+                # Extract and convert to title case
+                match = re.search(r"/drugs/([\w-]+)-(\d+)$", gen_url)
+                if match:
+                    slug = match.group(1)
+                    # Convert slug to title: durite-5-tablet -> Durite 5 Tablet
+                    gen_name = " ".join(word.capitalize() for word in slug.split("-"))
+
+            # Generic price - look for price with rupee symbol
+            gen_price = None
+            price_text_el = generic_container.locator('text=/₹\\s*[\\d,]+/').first
+            if await price_text_el.count() > 0:
+                gen_price = extract_price(await price_text_el.inner_text())
+
+            # Generic manufacturer/marketer - look for "by" text
+            gen_by = None
+            by_text_el = generic_container.locator('text=/^by /i').first
+            if await by_text_el.count() > 0:
+                by_text = (await by_text_el.inner_text()).strip()
+                if by_text.lower().startswith("by "):
+                    gen_by = by_text[3:].strip()
+
+            # Generic contains (composition) - look for salt info or composition text
+            gen_contains = None
+            # Try finding text with composition pattern like "Torasemide (5mg)"
+            contains_el = generic_container.locator('text=/[A-Z][a-z]+.*\\([\\d.]+\\s*[mgu]+\\)/').first
+            if await contains_el.count() > 0:
+                gen_contains = (await contains_el.inner_text()).strip()
+
+            result["generic_alternative"] = {
+                "alternate_name": gen_name,
+                "url": gen_url,
+                "price": gen_price,
+                "by_who": gen_by,
+                "contains_what": gen_contains,
+            }
+
+        print(f"  [OK] Extracted: {result['medicine_name']}")
+
+    except Exception as e:
+        print(f"Error scraping product detail: {e}")
+    finally:
+        await context.close()
+
+    return result
+
+
 async def main():
     medicine_name = "paracetamol"
     max_products = 10
@@ -189,5 +402,44 @@ async def main():
     print(json.dumps(results, indent=2))
 
 
+async def main2():
+    """
+    Main function for scraping detailed product information from a specific 1mg product URL.
+    Usage: python 1mg_scraper.py --detail <product_url> [--headless]
+    Example: python 1mg_scraper.py --detail https://www.1mg.com/drugs/torget-5-tablet-116470
+    """
+    product_url = "https://www.1mg.com/drugs/torget-5-tablet-116470"
+    headless = False
+
+    args = [a for a in sys.argv[1:] if a]
+
+    if "--headless" in args:
+        headless = True
+
+    # Look for product URL
+    for i, arg in enumerate(args):
+        if arg == "--detail" and i + 1 < len(args):
+            product_url = args[i + 1]
+            break
+        elif arg.startswith("http"):
+            product_url = arg
+            break
+
+    print(f"Scraping detailed product info from: {product_url}")
+    print("=" * 50)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=headless)
+        result = await scrape_1mg_product_detail(browser, product_url)
+        await browser.close()
+
+    print(f"\n=== Product Details ===")
+    print(json.dumps(result, indent=2))
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Check if --detail flag is present to use main2
+    if "--detail" in sys.argv or any(arg.startswith("https://www.1mg.com/drugs/") for arg in sys.argv):
+        asyncio.run(main2())
+    else:
+        asyncio.run(main())
