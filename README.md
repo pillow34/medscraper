@@ -47,15 +47,21 @@ python 1mg_scraper_v2.py --detail --headless
 ```
 - `--detail`: Enables detailed scraping for URLs found in the database.
 
+```bash
+python 1mg_scraper_v2.py --extract_scraped_data
+```
+- `--extract_scraped_data`: Save and excel file with all scraped data.
+
 ### Command Line Arguments
-| Argument | Description |
-|---|---|
-| `medicine_name` | (Optional) Name of a single medicine to search for. |
-| `--limit <int>` | Maximum number of products to scrape per search. |
-| `--headless` | Run browser in headless mode. |
-| `--debug` | Enable DEBUG level logging for troubleshooting. |
-| `--brands` | Extract brands using search terms from `brands_to_fetch.txt`. |
+| Argument | Description                                                         |
+|---|---------------------------------------------------------------------|
+| `medicine_name` | (Optional) Name of a single medicine to search for.                 |
+| `--limit <int>` | Maximum number of products to scrape per search.                    |
+| `--headless` | Run browser in headless mode.                                       |
+| `--debug` | Enable DEBUG level logging for troubleshooting.                     |
+| `--brands` | Extract brands using search terms from `brands_to_fetch.txt`.       |
 | `--detail` | Extract full PDP data and substitutes using URLs from the database. |
+| `--extract_scraped_data` | Save and excel file with all the scraped data.                      |
 
 ### Data Schema
 Data is stored in `db/db.duckdb` with the following main tables:

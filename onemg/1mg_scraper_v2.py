@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from datetime import datetime
 import re
 import json
 import sys
@@ -441,6 +442,8 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="DEBUG level logging")
     parser.add_argument("--brands", action="store_true", help="extract brands using search from file")
     parser.add_argument("--detail", action="store_true", help="extract pdp data along with substitutes using url from extracted brands")
+    parser.add_argument("--extract_scraped_data", action="store_true", help="extract scraped data from db")
+
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
@@ -461,5 +464,10 @@ if __name__ == "__main__":
         logging.info(f"Found {len(brands)} brands")
         for _, url in brands.iterrows():
             asyncio.run(main2(medicine_url=url['url'], headless=args.headless, dbase=dbase))
-    pass
 
+    if args.extract_scraped_data:
+        df = dbase.extract_scraped_data()
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        df.to_excel(f'scraped_data_{now}.xlsx', index=False)
+
+    pass

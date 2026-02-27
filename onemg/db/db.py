@@ -113,3 +113,7 @@ class Database():
         db = duckdb.connect(self.dbpath)
         db.execute("UPDATE medicine_details SET scraped = TRUE, updatedAt = current_localtimestamp() WHERE url = ?", (medicine_url,))
 
+
+    def extract_scraped_data(self):
+        db = duckdb.connect(self.dbpath)
+        return db.execute("SELECT * FROM medicine_scraped_details").df()

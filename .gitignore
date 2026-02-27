@@ -206,3 +206,4 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 /onemg/db/db.duckdb
+/onemg/scraped_data_20260228_045538.xlsx
