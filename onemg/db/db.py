@@ -101,7 +101,18 @@ class Database():
 
     def get_brands(self):
         db = duckdb.connect(self.dbpath)
-        return db.execute("SELECT DISTINCT url FROM medicine_details WHERE scraped = FALSE").df()
+        return db.execute("""
+            SELECT m.medicine_name, md.url 
+            FROM medicine_details md 
+            JOIN medicines m ON md.url = m.url 
+            WHERE md.scraped = FALSE
+        """).df()
+
+
+    def clear_pending_brands(self):
+        db = duckdb.connect(self.dbpath)
+        db.execute("DELETE FROM medicines WHERE url IN (SELECT url FROM medicine_details WHERE scraped = FALSE)")
+        db.execute("DELETE FROM medicine_details WHERE scraped = FALSE")
 
 
     def get_medicine_details(self, medicine_url):

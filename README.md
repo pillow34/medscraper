@@ -2,9 +2,9 @@
 
 A collection of medicine scrapers for various Indian pharmacies.
 
-## 1mg Scraper v2 (`1mg_scraper_v2.py`)
+## 1mg Scraper v2 (`onemg_scraper_v2.py`)
 
-The `1mg_scraper_v2.py` script is a powerful tool to extract medicine information from 1mg.com using Playwright. It operates in two main stages: initial search to find products (brands) and detailed scraping to extract full product details including compositions, substitutes, and generic alternatives.
+The `onemg_scraper_v2.py` script is a powerful tool to extract medicine information from 1mg.com using Playwright. It operates in two main stages: initial search to find products (brands) and detailed scraping to extract full product details including compositions, substitutes, and generic alternatives.
 
 ### Features
 - **Search Mode**: Scrapes product listings for a list of medicine names.
@@ -20,20 +20,28 @@ The `1mg_scraper_v2.py` script is a powerful tool to extract medicine informatio
 - Pandas (`pip install pandas`)
 
 ### Project Structure for 1mg
-- `medscraper/onemg/1mg_scraper_v2.py`: The main scraper script.
+- `medscraper/onemg/onemg_scraper_v2.py`: The main scraper script.
 - `medscraper/onemg/brands_to_fetch.txt`: Input file for search mode (one medicine name per line).
 - `medscraper/onemg/db/db.py`: Database management logic.
 - `medscraper/onemg/db/db.duckdb`: The database where data is stored.
+- `medscraper/onemg/app_1mg.py`: Streamlit application for 1mg scraping.
 
 ### Usage
 
+#### Streamlit App (Recommended)
+You can run the Streamlit app for a user-friendly interface:
+```bash
+uv run streamlit run onemg/app_1mg.py
+```
+
+#### CLI Mode
 Navigate to the `medscraper/onemg` directory before running the script.
 
 #### Step 1: Scrape Product Links (Search Mode)
 This mode reads medicine names from `brands_to_fetch.txt`, searches for them on 1mg, and stores the basic info and URLs in the database.
 
 ```bash
-python 1mg_scraper_v2.py --brands --limit 20 --headless
+uv run python onemg_scraper_v2.py --brands --limit 20 --headless
 ```
 - `--brands`: Enables search mode using the input file.
 - `--limit <number>`: Limits the number of products scraped per search term.
@@ -43,12 +51,12 @@ python 1mg_scraper_v2.py --brands --limit 20 --headless
 This mode retrieves the URLs collected in Step 1 from the database and scrapes full details for each.
 
 ```bash
-python 1mg_scraper_v2.py --detail --headless
+uv run python onemg_scraper_v2.py --detail --headless
 ```
 - `--detail`: Enables detailed scraping for URLs found in the database.
 
 ```bash
-python 1mg_scraper_v2.py --extract_scraped_data
+uv run python onemg_scraper_v2.py --extract_scraped_data
 ```
 - `--extract_scraped_data`: Save and excel file with all scraped data.
 

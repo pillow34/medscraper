@@ -1,2 +1,2 @@
 import duckdb
-db = duckdb.connect('db/db.duckdb')
+db = duckdb.connect('onemg/db/db.duckdb')

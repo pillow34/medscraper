@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 from datetime import datetime
 import re
 import json
@@ -12,9 +13,11 @@ import logging
 
 
 # Fix encoding for Windows
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+# if sys.platform == "win32":
+#     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 def extract_price(text):
     if not text:
@@ -406,8 +409,8 @@ async def main(medicine_name, max_products=15, headless=True, dbase=None):
 async def main2(medicine_url, headless=True, dbase=None):
     """
     Main function for scraping detailed product information from a specific 1mg product URL.
-    Usage: python 1mg_scraper.py --detail <product_url> [--headless]
-    Example: python 1mg_scraper.py --detail https://www.1mg.com/drugs/torget-5-tablet-116470
+    Usage: python onemg_scraper_v2.py --detail <product_url> [--headless]
+    Example: python onemg_scraper_v2.py --detail https://www.1mg.com/drugs/torget-5-tablet-116470
     """
     # product_url = "https://www.1mg.com/drugs/torget-5-tablet-116470"
     # headless = False
@@ -449,11 +452,15 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
-    dbase = Database(dbpath='db/db.duckdb')
+    # Use absolute path for database relative to script location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(script_dir, 'db', 'db.duckdb')
+    dbase = Database(dbpath=db_path)
     dbase.init()
 
     if args.brands:
-        with open('brands_to_fetch.txt', 'r') as f:
+        brands_file = os.path.join(script_dir, 'brands_to_fetch.txt')
+        with open(brands_file, 'r') as f:
             brands = f.read().splitlines()
 
         for brand in brands:
