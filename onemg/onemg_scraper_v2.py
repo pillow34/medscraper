@@ -405,8 +405,8 @@ async def main(medicine_name, max_products=15, headless=True, dbase=None):
     logging.debug(f"Results: {results}")
     # print(json.dumps(results, indent=4))
     for i, result in enumerate(results, start=1):
-        dbase.insert_1mg(
-            result
+        dbase.insert_medicine(
+            result, '1MG'
         )
 
 
@@ -436,7 +436,7 @@ async def main2(medicine_url, headless=True, dbase=None):
     result["medicine_url"] = product_url
     # result["medicine_id"] = extract_medicine_id(product_url)
     # logging.debug(f"{extract_medicine_id(product_url)=}")
-    dbase.insert_scraped_1mg(result)
+    dbase.insert_scraped_details(result, '1MG')
 
 
 if __name__ == "__main__":
@@ -477,8 +477,8 @@ if __name__ == "__main__":
             asyncio.run(main(medicine_name=brand, max_products=args.limit, headless=args.headless, dbase=dbase))
 
     if args.detail:
-        brands = dbase.get_brands()
-        logging.info(f"Found {len(brands)} brands")
+        brands = dbase.get_brands(source='1MG')
+        logging.info(f"Found {len(brands)} brands for 1MG")
         for _, url in brands.iterrows():
             asyncio.run(main2(medicine_url=url['url'], headless=args.headless, dbase=dbase))
 

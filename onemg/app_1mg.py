@@ -45,8 +45,16 @@ def setup_logging(debug_mode=False):
 sys.path.append(os.path.dirname(__file__))
 
 # Import logic from the renamed scraper script
-from onemg_scraper_v2 import main, main2
+from onemg_scraper_v2 import main as main_1mg, main2 as main2_1mg
+import platinumrx_scraper
+import truemeds_scraper
 from db.db import Database
+
+SOURCES = {
+    "1MG": {"search": main_1mg, "detail": main2_1mg},
+    "PlatinumRx": {"search": platinumrx_scraper.main, "detail": None},
+    "TrueMeds": {"search": truemeds_scraper.main, "detail": truemeds_scraper.main2},
+}
 
 # Set page config
 st.set_page_config(
@@ -87,16 +95,29 @@ if debug_mode:
 
 headless = st.sidebar.checkbox("Run Browser Headless", value=True)
 limit = st.sidebar.number_input("Products per Search Limit", min_value=1, max_value=100, value=20)
+source = st.sidebar.selectbox("Scrape Source", list(SOURCES.keys()))
 
 # Initialize Database
 db_path = os.path.join(os.path.dirname(__file__), 'db/db.duckdb')
 dbase = Database(dbpath=db_path)
 dbase.init()
 
+# Database Management
+st.sidebar.markdown("---")
+st.sidebar.header("Database Management")
+if st.sidebar.button("⚠️ Reset Database", help="This will delete ALL scraped data and search history! Use with caution."):
+    try:
+        dbase.del_()
+        dbase.init()
+        st.sidebar.success("Database reset successfully!")
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Error resetting database: {e}")
+
 # Title and Description
-st.title("💊 1mg Medicine Scraper")
-st.markdown("""
-This app allows you to scrape medicine information from **1mg.com**. 
+st.title("💊 Medicine Scraper")
+st.markdown(f"""
+This app allows you to scrape medicine information from **{source}**. 
 You can search for brands to find product links, and then scrape detailed information including compositions and substitutes.
 """)
 
@@ -110,12 +131,19 @@ with tab1:
     
     if search_mode == "Single Medicine":
         medicine_name = st.text_input("Enter Medicine Name (e.g., Telma)")
+        
+        # Check if already searched
+        is_searched = dbase.get_brand_search_status(medicine_name, source)
+        if is_searched:
+            st.info(f"'{medicine_name}' has already been searched on {source}.")
+            
         if st.button("Start Search", key="single_search"):
             if medicine_name:
-                with st.status(f"Searching for '{medicine_name}'...") as status:
-                    asyncio.run(main(medicine_name=medicine_name, max_products=limit, headless=headless, dbase=dbase))
-                    status.update(label=f"Completed search for '{medicine_name}'!", state="complete")
-                st.success(f"Successfully scraped results for '{medicine_name}'")
+                with st.status(f"Searching for '{medicine_name}' on {source}...") as status:
+                    asyncio.run(SOURCES[source]["search"](medicine_name=medicine_name, max_products=limit, headless=headless, dbase=dbase))
+                    status.update(label=f"Completed search for '{medicine_name}' on {source}!", state="complete")
+                st.success(f"Successfully scraped results for '{medicine_name}' from {source}")
+                st.rerun()
             else:
                 st.error("Please enter a medicine name.")
                 
@@ -140,8 +168,8 @@ with tab1:
                 status_text = st.empty()
                 
                 for idx, brand in enumerate(brands):
-                    status_text.text(f"Scraping brand {idx+1}/{len(brands)}: {brand}")
-                    asyncio.run(main(medicine_name=brand, max_products=limit, headless=headless, dbase=dbase))
+                    status_text.text(f"Scraping brand {idx+1}/{len(brands)} from {source}: {brand}")
+                    asyncio.run(SOURCES[source]["search"](medicine_name=brand, max_products=limit, headless=headless, dbase=dbase))
                     progress_bar.progress((idx + 1) / len(brands))
                 
                 status_text.text("Batch search completed!")
@@ -158,34 +186,39 @@ with tab2:
         st.session_state.show_pending = True
         
     if col_b2.button("Clear Pending Brands"):
-        dbase.clear_pending_brands()
+        dbase.clear_pending_brands(source=source)
         st.session_state.show_pending = True
-        st.success("Cleared all pending brands from database.")
+        st.success(f"Cleared all pending brands for {source} from database.")
 
     if st.session_state.get("show_pending"):
         # Get pending brands from DB
-        pending_brands = dbase.get_brands()
+        pending_brands = dbase.get_brands(source=source)
         num_pending = len(pending_brands)
         
-        st.info(f"Found **{num_pending}** product URLs in the database pending detailed scraping.")
+        st.info(f"Found **{num_pending}** product URLs for **{source}** in the database pending detailed scraping.")
         
         if num_pending > 0:
-            with st.expander("Show Pending Products", expanded=True):
-                st.dataframe(pending_brands, width="stretch")
-                
-            if st.button("Start Detailed Scraping", key="detail_scrape"):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                for idx, (_, row) in enumerate(pending_brands.iterrows()):
-                    url = row['url']
-                    name = row['medicine_name']
-                    status_text.text(f"Scraping details {idx+1}/{num_pending}: {name} ({url})")
-                    asyncio.run(main2(medicine_url=url, headless=headless, dbase=dbase))
-                    progress_bar.progress((idx + 1) / num_pending)
-                
-                status_text.text("Detailed scraping completed!")
-                st.success(f"Successfully scraped details for {num_pending} products.")
+            if SOURCES[source]["detail"] is None:
+                st.warning(f"{source} integration currently performs detailed scraping during the search phase. No further action needed.")
+                with st.expander("Show Scraped Products (Listing)", expanded=False):
+                    st.dataframe(pending_brands, width="stretch")
+            else:
+                with st.expander("Show Pending Products", expanded=True):
+                    st.dataframe(pending_brands, width="stretch")
+                    
+                if st.button("Start Detailed Scraping", key="detail_scrape"):
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    for idx, (_, row) in enumerate(pending_brands.iterrows()):
+                        url = row['url']
+                        name = row['medicine_name']
+                        status_text.text(f"Scraping details {idx+1}/{num_pending}: {name} ({url})")
+                        asyncio.run(SOURCES[source]["detail"](medicine_url=url, headless=headless, dbase=dbase))
+                        progress_bar.progress((idx + 1) / num_pending)
+                    
+                    status_text.text("Detailed scraping completed!")
+                    st.success(f"Successfully scraped details for {num_pending} products.")
         else:
             st.warning("No pending URLs found. Please run 'Search Brands' first.")
     else:
@@ -209,14 +242,18 @@ with tab3:
                 # Search by name or composition
                 search_text = col_f1.text_input("Search Name/Composition", "")
                 
+                # Filter by Source
+                all_sources = sorted(df['source'].unique().tolist())
+                selected_sources = col_f2.multiselect("Filter by Source", options=all_sources, default=all_sources)
+                
                 # Filter by Marketer
                 marketers = sorted([m for m in df['medicine_marketer'].unique().tolist() if m])
-                selected_marketers = col_f2.multiselect("Filter by Marketer", options=marketers)
+                selected_marketers = col_f3.multiselect("Filter by Marketer", options=marketers)
+                
+                col_f4, col_f5, col_f6 = st.columns(3)
                 
                 # Generic Availability
-                generic_opt = col_f3.radio("Generic Alternative Available", ["All", "Yes", "No"], horizontal=True)
-                
-                col_f4, col_f5 = st.columns(2)
+                generic_opt = col_f4.radio("Generic Alternative Available", ["All", "Yes", "No"], horizontal=True)
                 
                 # Price Range
                 price_data = df['medicine_selling_price'].dropna()
@@ -224,10 +261,10 @@ with tab3:
                     min_price = float(price_data.min())
                     max_price = float(price_data.max())
                     if min_price == max_price:
-                        col_f4.info(f"Price: ₹{min_price}")
+                        col_f5.info(f"Price: ₹{min_price}")
                         price_range = (min_price, max_price)
                     else:
-                        price_range = col_f4.slider("Price Range (₹)", min_price, max_price, (min_price, max_price))
+                        price_range = col_f5.slider("Price Range (₹)", min_price, max_price, (min_price, max_price))
                 else:
                     price_range = (0.0, float('inf'))
                 
@@ -237,15 +274,18 @@ with tab3:
                     min_disc = float(discount_data.min())
                     max_disc = float(discount_data.max())
                     if min_disc == max_disc:
-                        col_f5.info(f"Discount: {min_disc}%")
+                        col_f6.info(f"Discount: {min_disc}%")
                         discount_range = (min_disc, max_disc)
                     else:
-                        discount_range = col_f5.slider("Discount Range (%)", min_disc, max_disc, (min_disc, max_disc))
+                        discount_range = col_f6.slider("Discount Range (%)", min_disc, max_disc, (min_disc, max_disc))
                 else:
                     discount_range = (0.0, 100.0)
                 
             # Apply Filters
             filtered_df = df.copy()
+            
+            if selected_sources:
+                filtered_df = filtered_df[filtered_df['source'].isin(selected_sources)]
             
             if search_text:
                 filtered_df = filtered_df[
@@ -306,4 +346,4 @@ with tab3:
 
 # Footer
 st.markdown("---")
-st.markdown("Developed with ❤️ for 1mg Scraping")
+st.markdown("Developed with ❤️ for Multi-Source Medicine Scraping")

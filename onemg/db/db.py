@@ -1,5 +1,5 @@
 from abc import ABC
-
+import json
 import duckdb
 
 class Database():
@@ -12,7 +12,7 @@ class Database():
         db.execute("""
         CREATE TABLE IF NOT EXISTS medicines (
             url TEXT PRIMARY KEY,
-            medicine_id TEXT NOT NULL,
+            medicine_id TEXT,
             medicine_name TEXT NOT NULL,
             mrp REAL,
             pack_size_quantity TEXT,
@@ -24,11 +24,12 @@ class Database():
         );    
         
         CREATE TABLE IF NOT EXISTS medicine_details (
-        url TEXT PRIMARY KEY,
-        scraped boolean DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
-        ;
+            url TEXT PRIMARY KEY,
+            source TEXT,
+            scraped boolean DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
         
         CREATE TABLE IF NOT EXISTS medicine_scraped_details (
             medicine_url TEXT PRIMARY KEY,
@@ -43,10 +44,34 @@ class Database():
             substitutes TEXT,
             generic_alternative_available BOOLEAN,
             generic_alternative JSON,
+            source TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS brand_searches (
+            brand_name TEXT,
+            source TEXT,
+            scraped BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (brand_name, source)
+        );
         """)
+        
+        # Migrations for existing tables
+        try:
+            db.execute("ALTER TABLE medicine_details ADD COLUMN source TEXT;")
+        except:
+            pass
+        try:
+            db.execute("ALTER TABLE medicine_scraped_details ADD COLUMN source TEXT;")
+        except:
+            pass
+        try:
+            db.execute("ALTER TABLE medicines ALTER medicine_id DROP NOT NULL;")
+        except:
+            pass
         pass
 
 
@@ -55,9 +80,10 @@ class Database():
         db.execute("DROP TABLE IF EXISTS medicines;")
         db.execute("DROP TABLE IF EXISTS medicine_details;")
         db.execute("DROP TABLE IF EXISTS medicine_scraped_details;")
+        db.execute("DROP TABLE IF EXISTS brand_searches;")
 
 
-    def insert_1mg(self, medicine):
+    def insert_medicine(self, medicine, source):
         db = duckdb.connect(self.dbpath)
         db.execute(f"INSERT INTO medicines (url, medicine_id, medicine_name, mrp, pack_size_quantity, selling_price, discount_percentage, source) "
                    f"VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -71,15 +97,15 @@ class Database():
                    f"discount_percentage = EXCLUDED.discount_percentage, "
                    f"source = EXCLUDED.source, "
                    f"updatedAt = current_localtimestamp()"
-                   , (medicine['medicine_url'], medicine['medicine_id'], medicine['medicine_name'], medicine['mrp'], medicine['pack_size_quantity'], medicine['selling_price'], medicine['discount_percentage'], '1MG'))
+                   , (medicine['medicine_url'], medicine['medicine_id'], medicine['medicine_name'], medicine['mrp'], medicine['pack_size_quantity'], medicine['selling_price'], medicine['discount_percentage'], source))
 
-        db.execute("INSERT INTO medicine_details (url) VALUES (?) ON CONFLICT DO UPDATE SET scraped = FALSE, updatedAt = current_localtimestamp()", (medicine['medicine_url'],))
+        db.execute("INSERT INTO medicine_details (url, source) VALUES (?, ?) ON CONFLICT DO UPDATE SET scraped = FALSE, updatedAt = current_localtimestamp()", (medicine['medicine_url'], source))
 
 
-    def insert_scraped_1mg(self, medicine):
+    def insert_scraped_details(self, medicine, source):
         db = duckdb.connect(self.dbpath)
-        db.execute(f"INSERT INTO medicine_scraped_details (medicine_url, medicine_name, medicine_composition, medicine_marketer, medicine_storage, medicine_mrp, medicine_selling_price, medicine_discount, pack_size_information, substitutes, generic_alternative_available, generic_alternative) "
-                   f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        db.execute(f"INSERT INTO medicine_scraped_details (medicine_url, medicine_name, medicine_composition, medicine_marketer, medicine_storage, medicine_mrp, medicine_selling_price, medicine_discount, pack_size_information, substitutes, generic_alternative_available, generic_alternative, source) "
+                   f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                    f"ON CONFLICT DO UPDATE "
                    f"SET medicine_url = EXCLUDED.medicine_url, "
                    f"medicine_name = EXCLUDED.medicine_name, "
@@ -93,26 +119,45 @@ class Database():
                    f"substitutes = EXCLUDED.substitutes, "
                    f"generic_alternative_available = EXCLUDED.generic_alternative_available, "
                    f"generic_alternative = EXCLUDED.generic_alternative,"
+                   f"source = EXCLUDED.source,"
                    f"updatedAt = current_localtimestamp()"
-                   , (medicine['medicine_url'], medicine['medicine_name'], medicine['medicine_composition'], medicine['medicine_marketer'], medicine['medicine_storage'], medicine['medicine_mrp'], medicine['medicine_selling_price'], medicine['medicine_discount'], medicine['pack_size_information'], medicine['substitutes'], medicine['generic_alternative_available'], medicine['generic_alternative']))
+                   , (medicine['medicine_url'], medicine['medicine_name'], medicine['medicine_composition'], medicine['medicine_marketer'], medicine['medicine_storage'], medicine['medicine_mrp'], medicine['medicine_selling_price'], medicine['medicine_discount'], medicine['pack_size_information'], str(medicine['substitutes']) if 'substitutes' in medicine else None, medicine.get('generic_alternative_available'), json.dumps(medicine.get('generic_alternative')) if medicine.get('generic_alternative') else None, source))
 
         self.update_scraped(medicine['medicine_url'])
 
 
-    def get_brands(self):
+    def mark_brand_as_searched(self, brand_name, source):
         db = duckdb.connect(self.dbpath)
-        return db.execute("""
-            SELECT m.medicine_name, md.url 
+        db.execute("INSERT INTO brand_searches (brand_name, source, scraped) VALUES (?, ?, TRUE) ON CONFLICT DO UPDATE SET updatedAt = current_localtimestamp()", (brand_name.upper(), source))
+
+
+    def get_brand_search_status(self, brand_name, source):
+        db = duckdb.connect(self.dbpath)
+        res = db.execute("SELECT scraped FROM brand_searches WHERE brand_name = ? AND source = ?", (brand_name.upper(), source)).fetchone()
+        return res[0] if res else False
+
+
+    def get_brands(self, source=None):
+        db = duckdb.connect(self.dbpath)
+        query = """
+            SELECT m.medicine_name, md.url, m.source
             FROM medicine_details md 
             JOIN medicines m ON md.url = m.url 
             WHERE md.scraped = FALSE
-        """).df()
+        """
+        if source:
+            query += f" AND md.source = '{source}'"
+        return db.execute(query).df()
 
 
-    def clear_pending_brands(self):
+    def clear_pending_brands(self, source=None):
         db = duckdb.connect(self.dbpath)
-        db.execute("DELETE FROM medicines WHERE url IN (SELECT url FROM medicine_details WHERE scraped = FALSE)")
-        db.execute("DELETE FROM medicine_details WHERE scraped = FALSE")
+        where_clause = "WHERE scraped = FALSE"
+        if source:
+            where_clause += f" AND source = '{source}'"
+        
+        db.execute(f"DELETE FROM medicines WHERE url IN (SELECT url FROM medicine_details {where_clause})")
+        db.execute(f"DELETE FROM medicine_details {where_clause}")
 
 
     def get_medicine_details(self, medicine_url):

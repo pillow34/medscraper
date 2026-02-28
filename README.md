@@ -2,9 +2,14 @@
 
 A collection of medicine scrapers for various Indian pharmacies.
 
-## 1mg Scraper v2 (`onemg_scraper_v2.py`)
+## Multi-Source Medicine Scraper
 
-The `onemg_scraper_v2.py` script is a powerful tool to extract medicine information from 1mg.com using Playwright. It operates in two main stages: initial search to find products (brands) and detailed scraping to extract full product details including compositions, substitutes, and generic alternatives.
+The medscraper app supports multiple sources to extract medicine information:
+- **1mg.com**
+- **PlatinumRx.in**
+- **TrueMeds.in**
+
+All sources operate in two main stages: initial search to find products (brands) and detailed scraping to extract full product details including compositions, substitutes, and generic alternatives.
 
 ### Features
 - **Search Mode**: Scrapes product listings for a list of medicine names.
@@ -19,12 +24,14 @@ The `onemg_scraper_v2.py` script is a powerful tool to extract medicine informat
 - DuckDB (`pip install duckdb`)
 - Pandas (`pip install pandas`)
 
-### Project Structure for 1mg
-- `medscraper/onemg/onemg_scraper_v2.py`: The main scraper script.
-- `medscraper/onemg/brands_to_fetch.txt`: Input file for search mode (one medicine name per line).
-- `medscraper/onemg/db/db.py`: Database management logic.
-- `medscraper/onemg/db/db.duckdb`: The database where data is stored.
-- `medscraper/onemg/app_1mg.py`: Streamlit application for 1mg scraping.
+### Project Structure
+- `onemg/onemg_scraper_v2.py`: Scraper script for 1mg.
+- `onemg/platinumrx_scraper.py`: Scraper script for PlatinumRx.
+- `onemg/truemeds_scraper.py`: Scraper script for TrueMeds.
+- `onemg/brands_to_fetch.txt`: Input file for search mode (one medicine name per line).
+- `onemg/db/db.py`: Database management logic.
+- `onemg/db/db.duckdb`: The database where data is stored.
+- `onemg/app_1mg.py`: Streamlit application.
 
 ### Usage
 
@@ -39,6 +46,7 @@ uv run streamlit run onemg/app_1mg.py
     - **Debug Mode**: Toggle to enable `DEBUG` level logging and see/download the log file.
     - **Run Browser Headless**: Choose to see the browser while scraping or hide it.
     - **Products per Search Limit**: Set how many results to fetch for each medicine name.
+    - **⚠️ Reset Database**: A button to completely clear the database, deleting all scraped data and search history.
 - **🔍 Search Brands Tab:**
     - **Single Medicine**: Type a name to search for it specifically.
     - **Batch from List**: Paste multiple medicine names (one per line) to search in bulk. This list is saved to `brands_to_fetch.txt` for persistence.
@@ -52,13 +60,17 @@ uv run streamlit run onemg/app_1mg.py
     - **Export**: Download filtered data as **CSV** or **Excel** files.
 
 #### CLI Mode
-Navigate to the `medscraper/onemg` directory before running the script.
+Navigate to the `medscraper/onemg` directory before running any of the scripts. Each scraper (`onemg_scraper_v2.py`, `platinumrx_scraper.py`, `truemeds_scraper.py`) supports the same set of command-line arguments.
 
 #### Step 1: Scrape Product Links (Search Mode)
-This mode reads medicine names from `brands_to_fetch.txt`, searches for them on 1mg, and stores the basic info and URLs in the database.
+This mode reads medicine names from `brands_to_fetch.txt`, searches for them on the selected source, and stores the basic info and URLs in the database.
 
 ```bash
 uv run python onemg_scraper_v2.py --brands --limit 20 --headless
+# OR
+uv run python platinumrx_scraper.py --brands --limit 20 --headless
+# OR
+uv run python truemeds_scraper.py --brands --limit 20 --headless
 ```
 - `--brands`: Enables search mode using the input file.
 - `--limit <number>`: Limits the number of products scraped per search term.
@@ -69,13 +81,17 @@ This mode retrieves the URLs collected in Step 1 from the database and scrapes f
 
 ```bash
 uv run python onemg_scraper_v2.py --detail --headless
+# OR
+uv run python platinumrx_scraper.py --detail --headless
+# OR
+uv run python truemeds_scraper.py --detail --headless
 ```
 - `--detail`: Enables detailed scraping for URLs found in the database.
 
 ```bash
 uv run python onemg_scraper_v2.py --extract_scraped_data
 ```
-- `--extract_scraped_data`: Save and excel file with all scraped data.
+- `--extract_scraped_data`: Save an Excel file with all scraped data.
 
 ### Command Line Arguments
 | Argument | Description                                                         |
