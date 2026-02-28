@@ -120,7 +120,32 @@ The 1mg scraper includes a robust logging system to help troubleshoot issues.
 - Example: `uv run python onemg_scraper_v2.py --brands --debug`
 
 ### Data Schema
-Data is stored in `db/db.duckdb` with the following main tables:
+Data is stored in `onemg/db/db.duckdb` with the following main tables:
 - `medicines`: Basic product info from search results.
 - `medicine_details`: Queue of URLs to be scraped for details.
 - `medicine_scraped_details`: Full product data (composition, substitutes, etc.).
+
+### Docker Support
+
+You can run the entire Streamlit app and scrapers using Docker. This ensures all dependencies (including Playwright and browsers) are correctly installed.
+
+#### Prerequisites
+- Docker and Docker Compose installed on your system.
+
+#### Running with Docker Compose
+1. Build and start the container:
+   ```bash
+   docker-compose up --build -d
+   ```
+2. Access the Streamlit app at: `http://localhost:8888`
+
+#### Persistence
+The `docker-compose.yml` is configured to persist your data even if the container is stopped or removed:
+- **Database**: Stored in `./onemg/db/` on your host.
+- **Brand List**: The `brands_to_fetch.txt` file is synced with your host.
+- **Logs**: The `scraper.log` file is synced with your host.
+
+#### Stopping the app
+```bash
+docker-compose down
+```

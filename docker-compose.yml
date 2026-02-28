@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  medscraper:
+    build: .
+    container_name: medscraper_app
+    ports:
+      - "8888:8888"
+    volumes:
+      # Persist the database
+      - ./onemg/db:/app/onemg/db
+      # Persist the brand list for batch searching
+      - ./onemg/brands_to_fetch.txt:/app/onemg/brands_to_fetch.txt
+      # Persist the scraper logs
+      - ./onemg/scraper.log:/app/onemg/scraper.log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
