@@ -34,6 +34,23 @@ You can run the Streamlit app for a user-friendly interface:
 uv run streamlit run onemg/app_1mg.py
 ```
 
+**Streamlit App Features:**
+- **Sidebar Configuration:**
+    - **Debug Mode**: Toggle to enable `DEBUG` level logging and see/download the log file.
+    - **Run Browser Headless**: Choose to see the browser while scraping or hide it.
+    - **Products per Search Limit**: Set how many results to fetch for each medicine name.
+- **🔍 Search Brands Tab:**
+    - **Single Medicine**: Type a name to search for it specifically.
+    - **Batch from List**: Paste multiple medicine names (one per line) to search in bulk. This list is saved to `brands_to_fetch.txt` for persistence.
+- **📄 Scrape Details Tab:**
+    - **Check Pending Brands**: Load the list of URLs found in the Search phase that are waiting for detailed scraping.
+    - **Clear Pending Brands**: Use this to empty the queue.
+    - **Start Detailed Scraping**: Begins the process of fetching compositions, marketers, and alternatives for each pending URL.
+- **📊 View Data Tab:**
+    - **Refresh Data**: Reload latest results from the database.
+    - **Filtering**: Filter the scraped results by Name/Composition, Marketer, Generic availability, Price, and Discount.
+    - **Export**: Download filtered data as **CSV** or **Excel** files.
+
 #### CLI Mode
 Navigate to the `medscraper/onemg` directory before running the script.
 
@@ -70,6 +87,21 @@ uv run python onemg_scraper_v2.py --extract_scraped_data
 | `--brands` | Extract brands using search terms from `brands_to_fetch.txt`.       |
 | `--detail` | Extract full PDP data and substitutes using URLs from the database. |
 | `--extract_scraped_data` | Save and excel file with all the scraped data.                      |
+
+### Debugging and Logging
+
+The 1mg scraper includes a robust logging system to help troubleshoot issues.
+
+#### In Streamlit App:
+- Toggle **Debug Mode** in the sidebar to enable detailed logging.
+- When enabled, logs are written to `onemg/scraper.log`.
+- A **Download Scraper Log** button will appear in the sidebar to easily access the log file.
+- Use the **🗑️ Clear Log File** button to empty the log file when it gets too large.
+- The log file has an automatic **TTL of 6 hours** and will be cleared if it is older than that when the app is started or refreshed.
+
+#### In CLI Mode:
+- Use the `--debug` flag to see detailed `DEBUG` level logs in the console.
+- Example: `uv run python onemg_scraper_v2.py --brands --debug`
 
 ### Data Schema
 Data is stored in `db/db.duckdb` with the following main tables:

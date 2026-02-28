@@ -1,3 +1,4 @@
+import logging
 import streamlit as st
 import asyncio
 import pandas as pd
@@ -6,6 +7,39 @@ import json
 import os
 import sys
 import io
+import time
+
+# Setup Logging
+LOG_FILE = os.path.join(os.path.dirname(__file__), 'scraper.log')
+
+def setup_logging(debug_mode=False):
+    level = logging.DEBUG if debug_mode else logging.INFO
+    
+    # TTL Check (6 hours = 21600 seconds)
+    if os.path.exists(LOG_FILE):
+        try:
+            file_age = time.time() - os.path.getmtime(LOG_FILE)
+            if file_age > 21600:
+                with open(LOG_FILE, 'w'):
+                    pass
+                print(f"Log file cleared due to TTL (6 hours)")
+        except Exception as e:
+            print(f"Failed to clear log file during TTL check: {e}")
+
+    # Reset existing handlers to allow reconfiguration
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
+    # Configure logging to both file and console
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    logging.info(f"Logging initialized at level: {logging.getLevelName(level)}")
 
 # Add the current directory to sys.path to allow imports from onemg_scraper_v2 and db.db
 sys.path.append(os.path.dirname(__file__))
@@ -21,6 +55,39 @@ st.set_page_config(
     layout="wide"
 )
 
+# Sidebar for configuration
+st.sidebar.header("Configuration")
+debug_mode = st.sidebar.checkbox("Debug Mode", value=False, help="Enable detailed logging and log to file.")
+setup_logging(debug_mode)
+
+if debug_mode:
+    st.sidebar.info("Debug mode is ON. Logs are being saved to scraper.log")
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "rb") as f:
+            st.sidebar.download_button(
+                label="📥 Download Scraper Log",
+                data=f,
+                file_name="scraper.log",
+                mime="text/plain"
+            )
+        
+        if st.sidebar.button("🗑️ Clear Log File", help="Remove all contents from the log file."):
+            try:
+                # Close handlers before clearing to avoid issues on Windows
+                for handler in logging.root.handlers[:]:
+                    logging.root.removeHandler(handler)
+                    handler.close()
+                
+                with open(LOG_FILE, 'w'):
+                    pass
+                st.sidebar.success("Log file cleared!")
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Error clearing log file: {e}")
+
+headless = st.sidebar.checkbox("Run Browser Headless", value=True)
+limit = st.sidebar.number_input("Products per Search Limit", min_value=1, max_value=100, value=20)
+
 # Initialize Database
 db_path = os.path.join(os.path.dirname(__file__), 'db/db.duckdb')
 dbase = Database(dbpath=db_path)
@@ -32,11 +99,6 @@ st.markdown("""
 This app allows you to scrape medicine information from **1mg.com**. 
 You can search for brands to find product links, and then scrape detailed information including compositions and substitutes.
 """)
-
-# Sidebar for configuration
-st.sidebar.header("Configuration")
-headless = st.sidebar.checkbox("Run Browser Headless", value=True)
-limit = st.sidebar.number_input("Products per Search Limit", min_value=1, max_value=100, value=20)
 
 # Main layout with tabs
 tab1, tab2, tab3 = st.tabs(["🔍 Search Brands", "📄 Scrape Details", "📊 View Data"])
@@ -109,7 +171,7 @@ with tab2:
         
         if num_pending > 0:
             with st.expander("Show Pending Products", expanded=True):
-                st.dataframe(pending_brands, use_container_width=True)
+                st.dataframe(pending_brands, width="stretch")
                 
             if st.button("Start Detailed Scraping", key="detail_scrape"):
                 progress_bar = st.progress(0)

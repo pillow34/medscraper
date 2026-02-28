@@ -64,7 +64,7 @@ async def scrape_1mg(browser, medicine_name, max_products=10):
 
         # Get product containers
         cards = await page.locator('[class*="VerticalProductTile__container"]').all()
-        logging.debug(f"Found {len(cards)} product containers")
+        logging.info(f"Found {len(cards)} product containers for '{medicine_name}'")
 
         for card in cards:
             if len(results) >= max_products:
@@ -101,6 +101,8 @@ async def scrape_1mg(browser, medicine_name, max_products=10):
                 if not pack_size:
                     pack_match = re.search(r"of (\d+\s*\w+)", card_text, re.IGNORECASE)
                     pack_size = pack_match.group() if pack_match else None
+                
+                logging.debug(f"Processing card: {name} | Pack: {pack_size}")
 
                 # Selling Price - look for "Discounted Price"
                 sell_el = card.locator("text=Discounted Price").first
@@ -195,6 +197,7 @@ async def scrape_1mg_product_detail(browser, product_url):
         result["medicine_name"] = (
             (await name_el.inner_text()).strip() if await name_el.count() > 0 else None
         )
+        logging.info(f"Extracting details for: {result.get('medicine_name', 'Unknown')}")
 
         # Medicine Composition
         comp_el = page.locator('div[class*="saltInfo"]').first
@@ -324,6 +327,7 @@ async def scrape_1mg_product_detail(browser, product_url):
 
         if await generic_container.count() > 0:
             result["generic_alternative_available"] = True
+            logging.info("Generic alternative found.")
 
             # Get the link to the generic product
             gen_link_el = generic_container.locator('a[href*="/drugs/"]').first
@@ -449,9 +453,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
     # Use absolute path for database relative to script location
     script_dir = os.path.dirname(os.path.abspath(__file__))
     db_path = os.path.join(script_dir, 'db', 'db.duckdb')
