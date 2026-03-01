@@ -5,8 +5,8 @@ from datetime import datetime
 import re
 import json
 import sys
-import io
-from playwright.async_api import async_playwright, expect
+# import io
+from playwright.async_api import async_playwright #, expect
 from db.db import Database
 import logging
 
@@ -212,7 +212,8 @@ async def scrape_1mg_product_detail(browser, product_url):
         )
 
         # Medicine Storage
-        storage_el = page.locator('text=/Store.*below/i').first
+        # storage_el = page.locator('text=/Store.*below/i').first
+        storage_el = page.locator('div[class*="saltInfo DrugHeader__meta-value"]').last
         if await storage_el.count() == 0:
             storage_el = page.locator('text=/Storage/i').locator("xpath=following-sibling::*").first
         result["medicine_storage"] = (
@@ -384,7 +385,7 @@ async def scrape_1mg_product_detail(browser, product_url):
         logging.debug(f"  [OK] Extracted: {result['medicine_name']}")
 
     except Exception as e:
-        logging.error(f"Error scraping product detail: {e}")
+        logging.error(f"Error scraping product detail for {product_url}: {e}")
     finally:
         await context.close()
 

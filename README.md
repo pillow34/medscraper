@@ -113,6 +113,10 @@ The 1mg scraper includes a robust logging system to help troubleshoot issues.
 - When enabled, logs are written to `onemg/scraper.log`.
 - A **Download Scraper Log** button will appear in the sidebar to easily access the log file.
 - Use the **🗑️ Clear Log File** button to empty the log file when it gets too large.
+- **📋 Scraper Logs**: A real-time, scrollable log viewer at the bottom of the page.
+    - **Auto-Refresh**: Automatically updates every 2 seconds to show the latest scraper activity.
+    - **Search & Filter**: Search logs by keyword or toggle to show only **ERRORS** to quickly identify problematic products.
+    - **Scrollable**: A fixed-height container allows you to scroll through the last 500 lines of logs without cluttering the UI.
 - The log file has an automatic **TTL of 6 hours** and will be cleared if it is older than that when the app is started or refreshed.
 
 #### In CLI Mode:

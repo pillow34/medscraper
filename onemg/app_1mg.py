@@ -41,6 +41,48 @@ def setup_logging(debug_mode=False):
     )
     logging.info(f"Logging initialized at level: {logging.getLevelName(level)}")
 
+@st.fragment(run_every=2)
+def log_viewer_fragment():
+    if os.path.exists(LOG_FILE):
+        col_l1, col_l2 = st.columns([3, 1])
+        with col_l1:
+            log_search = st.text_input("🔍 Search Logs", placeholder="Filter by keyword...", key="log_search", label_visibility="collapsed")
+        with col_l2:
+            show_only_errors = st.checkbox("Show only ERRORS", value=False, key="log_show_errors")
+        
+        try:
+            with open(LOG_FILE, "r", encoding='utf-8', errors='replace') as f:
+                lines = f.readlines()
+                
+                if show_only_errors:
+                    lines = [line for line in lines if any(s in line.upper() for s in ["ERROR", "CRITICAL", "EXCEPTION", "FAILED"])]
+                
+                if log_search:
+                    lines = [line for line in lines if log_search.lower() in line.lower()]
+                
+                # Show last 500 lines for a better scrollable experience
+                last_lines = lines[-500:]
+                log_content = "".join(last_lines)
+                
+                if log_content:
+                    # Use a container with fixed height for scrollability
+                    with st.container(height=400, border=True):
+                        st.code(log_content, language="text")
+                    
+                    st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')} (Auto-refreshes every 2 seconds)")
+                else:
+                    st.info("No logs found matching the criteria.")
+        except Exception as e:
+            st.error(f"Error reading log file: {e}")
+    else:
+        st.info("No log file found. Logs will appear here once scraping starts.")
+
+def update_log_viewer():
+    """Helper to update the log viewer placeholder."""
+    if 'log_placeholder' in globals():
+        with log_placeholder:
+            log_viewer_fragment()
+
 # Add the current directory to sys.path to allow imports from onemg_scraper_v2 and db.db
 sys.path.append(os.path.dirname(__file__))
 
@@ -171,6 +213,7 @@ with tab1:
                     status_text.text(f"Scraping brand {idx+1}/{len(brands)} from {source}: {brand}")
                     asyncio.run(SOURCES[source]["search"](medicine_name=brand, max_products=limit, headless=headless, dbase=dbase))
                     progress_bar.progress((idx + 1) / len(brands))
+                    update_log_viewer()
                 
                 status_text.text("Batch search completed!")
                 st.success(f"Successfully scraped {len(brands)} brands.")
@@ -216,6 +259,7 @@ with tab2:
                         status_text.text(f"Scraping details {idx+1}/{num_pending}: {name} ({url})")
                         asyncio.run(SOURCES[source]["detail"](medicine_url=url, headless=headless, dbase=dbase))
                         progress_bar.progress((idx + 1) / num_pending)
+                        update_log_viewer()
                     
                     status_text.text("Detailed scraping completed!")
                     st.success(f"Successfully scraped details for {num_pending} products.")
@@ -256,30 +300,30 @@ with tab3:
                 generic_opt = col_f4.radio("Generic Alternative Available", ["All", "Yes", "No"], horizontal=True)
                 
                 # Price Range
-                price_data = df['medicine_selling_price'].dropna()
-                if not price_data.empty:
-                    min_price = float(price_data.min())
-                    max_price = float(price_data.max())
-                    if min_price == max_price:
-                        col_f5.info(f"Price: ₹{min_price}")
-                        price_range = (min_price, max_price)
-                    else:
-                        price_range = col_f5.slider("Price Range (₹)", min_price, max_price, (min_price, max_price))
-                else:
-                    price_range = (0.0, float('inf'))
+                # price_data = df['medicine_selling_price'].dropna()
+                # if not price_data.empty:
+                #     min_price = float(price_data.min())
+                #     max_price = float(price_data.max())
+                #     if min_price == max_price:
+                #         col_f5.info(f"Price: ₹{min_price}")
+                #         price_range = (min_price, max_price)
+                #     else:
+                #         price_range = col_f5.slider("Price Range (₹)", min_price, max_price, (min_price, max_price))
+                # else:
+                #     price_range = (0.0, float('inf'))
                 
                 # Discount Range
-                discount_data = df['medicine_discount'].dropna()
-                if not discount_data.empty:
-                    min_disc = float(discount_data.min())
-                    max_disc = float(discount_data.max())
-                    if min_disc == max_disc:
-                        col_f6.info(f"Discount: {min_disc}%")
-                        discount_range = (min_disc, max_disc)
-                    else:
-                        discount_range = col_f6.slider("Discount Range (%)", min_disc, max_disc, (min_disc, max_disc))
-                else:
-                    discount_range = (0.0, 100.0)
+                # discount_data = df['medicine_discount'].dropna()
+                # if not discount_data.empty:
+                #     min_disc = float(discount_data.min())
+                #     max_disc = float(discount_data.max())
+                #     if min_disc == max_disc:
+                #         col_f6.info(f"Discount: {min_disc}%")
+                #         discount_range = (min_disc, max_disc)
+                #     else:
+                #         discount_range = col_f6.slider("Discount Range (%)", min_disc, max_disc, (min_disc, max_disc))
+                # else:
+                #     discount_range = (0.0, 100.0)
                 
             # Apply Filters
             filtered_df = df.copy()
@@ -301,15 +345,15 @@ with tab3:
             elif generic_opt == "No":
                 filtered_df = filtered_df[filtered_df['generic_alternative_available'] == False]
                 
-            filtered_df = filtered_df[
-                (filtered_df['medicine_selling_price'] >= price_range[0]) &
-                (filtered_df['medicine_selling_price'] <= price_range[1])
-            ]
+            # filtered_df = filtered_df[
+            #     (filtered_df['medicine_selling_price'] >= price_range[0]) &
+            #     (filtered_df['medicine_selling_price'] <= price_range[1])
+            # ]
             
-            filtered_df = filtered_df[
-                (filtered_df['medicine_discount'] >= discount_range[0]) &
-                (filtered_df['medicine_discount'] <= discount_range[1])
-            ]
+            # filtered_df = filtered_df[
+            #     (filtered_df['medicine_discount'] >= discount_range[0]) &
+            #     (filtered_df['medicine_discount'] <= discount_range[1])
+            # ]
             
             st.write(f"Filtered Results: {len(filtered_df)}")
             
@@ -344,6 +388,14 @@ with tab3:
     except Exception as e:
         st.error(f"Error retrieving/filtering data: {e}")
 
+
 # Footer
 st.markdown("---")
+# --- Log Display ---
+st.markdown("---")
+log_placeholder = st.empty()
+with log_placeholder:
+    with st.expander("📋 Scraper Logs", expanded=False):
+        log_viewer_fragment()
+
 st.markdown("Developed with ❤️ for Multi-Source Medicine Scraping")

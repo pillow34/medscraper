@@ -68,11 +68,11 @@ class Database():
             db.execute("ALTER TABLE medicine_scraped_details ADD COLUMN source TEXT;")
         except:
             pass
-        try:
-            db.execute("ALTER TABLE medicines ALTER medicine_id DROP NOT NULL;")
-        except:
-            pass
-        pass
+        # try:
+        #     db.execute("ALTER TABLE medicines ALTER medicine_id DROP NOT NULL;")
+        # except:
+        #     pass
+        # pass
 
 
     def del_(self):
